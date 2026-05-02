@@ -2,6 +2,12 @@
 
 > `https://github.com/pisilinux/main` deposundaki paketleri **modern UI**, **mobil uyumlu tablo** ve güvenlik odaklı takip aracı.
 
+🔗 Bağlantılar
+    • 🐧 pisilinux.org
+    • 🐙 github.com/pisilinux
+    • 📦 main repo
+    • 📖 GitHub API Docs
+
 ## ✨ Özellikler
 
 | Özellik | Açıklama |
