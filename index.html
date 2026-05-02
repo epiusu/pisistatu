@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>PisiLinux Paket Takip</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" 
+        integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" 
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+  
+  <!-- CSP: Güvenlik Politikası -->
+  <meta http-equiv="Content-Security-Policy" 
+        content="default-src 'self'; 
+                 script-src 'self' https://cdnjs.cloudflare.com; 
+                 style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; 
+                 font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; 
+                 connect-src https://api.github.com; 
+                 img-src 'self' data: https:; 
+                 frame-ancestors 'none';">
+  
+  <meta name="description" content="PisiLinux main deposundaki paketleri takip edin." />
+  <meta name="theme-color" content="#0f172a" />
+  
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Skip Link (Erişilebilirlik) -->
+  <a href="#main" class="skip-link">İçeriğe atla</a>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="logo">
+          <i class="fa-solid fa-hexagon-nodes"></i>
+        </div>
+        <div>
+          <h1>PisiLinux <span class="accent">Paket Takip</span></h1>
+          <p class="subtitle">
+            <a href="https://github.com/pisilinux/main" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-github"></i> pisilinux/main
+            </a>
+          </p>
+        </div>
+      </div>
+      
+      <!-- İstatistik Çipleri -->
+      <div class="stats" id="stats" hidden>
+        <div class="stat-chip updated">
+          <i class="fa-solid fa-check"></i>
+          <span id="statUpdated">0</span>
+          <small>Güncel</small>
+        </div>
+        <div class="stat-chip stale">
+          <i class="fa-solid fa-clock"></i>
+          <span id="statStale">0</span>
+          <small>Orta</small>
+        </div>
+        <div class="stat-chip old">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span id="statOld">0</span>
+          <small>Eski</small>
+        </div>
+        <div class="stat-chip total">
+          <i class="fa-solid fa-boxes"></i>
+          <span id="statTotal">0</span>
+          <small>Toplam</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kontroller -->
+    <div class="controls">
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" id="searchInput" placeholder="Paket ara..." aria-label="Paket ara" maxlength="100" />
+        <button class="clear-btn" id="clearSearch" hidden aria-label="Aramayı temizle">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      
+      <div class="filters">
+        <select id="statusFilter" aria-label="Durum filtresi">
+          <option value="all">📋 Tüm Durumlar</option>
+          <option value="updated">✅ Güncel (≤7g)</option>
+          <option value="stale">⚠️ Orta (7-30g)</option>
+          <option value="old">❌ Eski (&gt;30g)</option>
+        </select>
+        <select id="categoryFilter" aria-label="Kategori filtresi">
+          <option value="all">🗂️ Tüm Kategoriler</option>
+        </select>
+      </div>
+      
+      <button class="btn btn-primary" id="refreshBtn" aria-label="Verileri yenile">
+        <i class="fa-solid fa-rotate-right"></i> Yenile
+      </button>
+      <button class="btn btn-secondary" id="exportBtn" aria-label="CSV olarak indir">
+        <i class="fa-solid fa-download"></i> CSV
+      </button>
+    </div>
+
+    <!-- Durum Çubuğu -->
+    <div class="status-bar" role="status" aria-live="polite">
+      <span class="status-dot pulsing"></span>
+      <span id="statusText">Başlatılıyor…</span>
+      <span id="lastFetch" class="fetch-time"></span>
+    </div>
+
+    <!-- Rate Limit Uyarısı -->
+    <div class="rate-limit-banner" id="rateLimitWarn" hidden>
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <span id="rateLimitMsg"></span>
+    </div>
+  </header>
+
+  <!-- Ana İçerik -->
+  <main id="main" class="main">
+    
+    <!-- Yükleniyor -->
+    <div id="loading" class="state-panel">
+      <div class="loader">
+        <div class="loader-ring">
+          <div></div><div></div><div></div><div></div>
+        </div>
+      </div>
+      <p class="state-title">Paketler yükleniyor</p>
+      <p class="state-sub" id="loadingDetail">GitHub API'ye bağlanıyor…</p>
+      <div class="progress-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <!-- Hata -->
+    <div id="error" class="state-panel" hidden>
+      <div class="error-icon">
+        <i class="fa-solid fa-circle-exclamation"></i>
+      </div>
+      <p class="state-title">Bir sorun oluştu</p>
+      <p class="state-sub" id="errorMessage"></p>
+      <button class="btn btn-retry" id="retryBtn">
+        <i class="fa-solid fa-rotate-right"></i> Tekrar Dene
+      </button>
+    </div>
+
+    <!-- Boş Sonuç -->
+    <div id="empty" class="state-panel" hidden>
+      <div class="empty-icon">
+        <i class="fa-solid fa-inbox"></i>
+      </div>
+      <p class="state-title">Sonuç bulunamadı</p>
+      <p class="state-sub">Farklı bir arama terimi veya filtre deneyin.</p>
+      <button class="btn btn-secondary" id="clearFilters">
+        <i class="fa-solid fa-filter-circle-xmark"></i> Filtreleri Temizle
+      </button>
+    </div>
+
+    <!-- Tablo -->
+    <div id="tableContainer" class="table-wrap" hidden>
+      <div class="results-bar">
+        <span id="resultsCount">0 paket</span>
+        <button class="btn-export" id="exportBtn2">
+          <i class="fa-solid fa-file-csv"></i> CSV İndir
+        </button>
+      </div>
+      
+      <div class="table-container">
+        <table class="package-table" role="table" aria-label="Paket listesi">
+          <thead>
+            <tr>
+              <th data-sort="name" tabindex="0" aria-sort="none">
+                <i class="fa-solid fa-box"></i> Paket Adı <span class="sort-icon"></span>
+              </th>
+              <th data-sort="size" tabindex="0" aria-sort="none">
+                <i class="fa-solid fa-weight-scale"></i> Boyutu <span class="sort-icon"></span>
+              </th>
+              <th data-sort="system" tabindex="0" aria-sort="none">
+                <i class="fa-solid fa-cube"></i> Paket Sistemi <span class="sort-icon"></span>
+              </th>
+              <th data-sort="current" tabindex="0" aria-sort="none">
+                <i class="fa-solid fa-calendar-check"></i> Güncel <span class="sort-icon"></span>
+              </th>
+              <th data-sort="old" tabindex="0" aria-sort="none">
+                <i class="fa-solid fa-calendar-xmark"></i> Eski <span class="sort-icon"></span>
+              </th>
+              <th>
+                <i class="fa-solid fa-note-sticky"></i> Kısa Not
+              </th>
+            </tr>
+          </thead>
+          <tbody id="packageBody">
+            <!-- JavaScript ile doldurulacak -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-links">
+        <a href="https://pisilinux.org" target="_blank" rel="noopener noreferrer">
+          <i class="fa-solid fa-globe"></i> pisilinux.org
+        </a>
+        <a href="https://github.com/pisilinux" target="_blank" rel="noopener noreferrer">
+          <i class="fa-brands fa-github"></i> GitHub
+        </a>
+        <a href="https://docs.github.com/rest" target="_blank" rel="noopener noreferrer">
+          <i class="fa-solid fa-book"></i> API Docs
+        </a>
+      </div>
+      <p class="footer-note">
+        <i class="fa-solid fa-database"></i> Veriler GitHub API'den · 
+        <i class="fa-solid fa-clock"></i> Önbellek: 15 dk · 
+        <i class="fa-solid fa-shield"></i> Güvenli
+      </p>
+    </div>
+  </footer>
+
+  <script src="tracker.js"></script>
+</body>
+</html>
