@@ -2,11 +2,13 @@
 
 > `https://github.com/pisilinux/main` deposundaki paketleri **modern UI**, **mobil uyumlu tablo** ve güvenlik odaklı takip aracı.
 
-🔗 Bağlantılar
-    • 🐧 pisilinux.org
-    • 🐙 github.com/pisilinux
-    • 📦 main repo
-    • 📖 GitHub API Docs
+<h2 class="western"><span style="color: #1d1d1f;">🔗 <span style="font-family: system-ui, ui-sans-serif, apple-system, BlinkMacSystemFont, Inter, NotoSansHans, sans-serif;">Bağlantılar</span></span></h2>
+<ul>
+ 	<li><span style="color: #1d1d1f;">🐧 </span><a href="https://pisilinux.org/" target="_blank" rel="noopener"><span style="color: #615ced;"><span style="font-family: system-ui, ui-sans-serif, apple-system, BlinkMacSystemFont, Inter, NotoSansHans, sans-serif;"><span style="font-size: medium;">pisilinux.org</span></span></span></a></li>
+ 	<li><span style="color: #1d1d1f;">🐙 </span><a href="https://github.com/pisilinux/main" target="_blank" rel="noopener"><span style="color: #615ced;"><span style="font-family: system-ui, ui-sans-serif, apple-system, BlinkMacSystemFont, Inter, NotoSansHans, sans-serif;"><span style="font-size: medium;">github.com/pisilinux</span></span></span></a></li>
+ 	<li><span style="color: #1d1d1f;">📦 </span><a href="https://github.com/pisilinux/main?spm=a2ty_o01.29997173.0.0.7b3955fbbLryE4" target="_blank" rel="noopener"><span style="color: #615ced;"><span style="font-family: system-ui, ui-sans-serif, apple-system, BlinkMacSystemFont, Inter, NotoSansHans, sans-serif;"><span style="font-size: medium;">main repo</span></span></span></a></li>
+ 	<li><span style="color: #1d1d1f;">📖 </span><a href="https://github.com/pisilinux/main/wiki/ADIM-ADIM-DOCKER-%C4%B0LE-DERLEME" target="_blank" rel="noopener"><span style="color: #615ced;"><span style="font-family: system-ui, ui-sans-serif, apple-system, BlinkMacSystemFont, Inter, NotoSansHans, sans-serif;"><span style="font-size: medium;">GitHub Wiki » Docker Kulanımı ve daha fazlası</span></span></span></a></li>
+</ul>
 
 ## ✨ Özellikler
 
