@@ -1,8 +1,8 @@
 # 📦 PisiLinux Paket Takip Sistemi
 
-> [`github.com/pisilinux/main`](https://github.com/pisilinux/main) deposundaki tüm paketlerin güncelleme durumlarını **tarihine göre** otomatik takip eden, güvenli, mobil uyumlu web arayüzü.
+> **[developer.pisilinux.org/packages](https://developer.pisilinux.org/packages)** üzerindeki **6492+ paketi** harf harf tarayarak tablo halinde gösteren, mobil uyumlu, güvenli web arayüzü.
 >
-> **Token gerekmez · Sunucu gerekmez · Tek klasör, aç-çalıştır**
+> **Token yok · Sunucu yok · Aç-çalıştır**
 
 ---
 
@@ -10,85 +10,52 @@
 
 | Sütun | Açıklama |
 |-------|----------|
-| **Paket Adı** | Paket adı (kategori altında) · GitHub klasörüne bağlantı |
-| **Boyut** | `pspec.xml` dosyasının KB cinsinden boyutu |
-| **Sistem** | Paket sistemi (pisi) |
-| **Güncel** | Son commit tarihi |
-| **Güncel olmayan** | Kaç gün/hafta/ay önce güncellendiği |
-| **Durum** | ✅ Güncel / ⚠️ Orta / ❌ Eski |
-| **Kısa Not** | Okunabilir özet + son commit bağlantısı |
+| **Paket Adı** | Paket adı — detay sayfasına bağlantı |
+| **Sürüm** | Paket sürümü |
+| **Kategori** | `system.base`, `desktop.kde.applications`, … |
+| **Depo** | `main` veya `contrib` |
+| **Durum** | Sürüm heuristiğine göre: Güncel / Orta / Eski / Alt paket |
+| **Kısa Not** | Paket açıklaması + detay linki |
 
 ---
 
 ## ✨ Özellikler
 
-- 🔄 **Otomatik tarama** — GitHub API üzerinden tüm kategori ve paketler
-- 📅 **Tarih bazlı durum** — Son commit'e göre sınıflandırma
-- 🔍 **Canlı arama** — Paket adı, kategori, versiyon
-- 🗂️ **Kategori filtresi** — API'den otomatik doldurulur
-- 📊 **Chip istatistikler** — Güncel / Orta / Eski sayıları
-- 💾 **sessionStorage önbelleki** — 15 dk, gereksiz API isteği yok
-- 📥 **CSV dışa aktarma** — Görünen listeyi tek tıkla indir
-- 📱 **Mobil uyumlu** — 320px'e kadar tam destek (kart görünümü)
-- 🛡️ **Güvenli** — XSS, SSRF, Path Traversal korumaları + CSP
-<!-- Responsive GIF resim -->
-<img
-  src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts.gif"
-  alt="plpts animated gif"
-  style="
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-  "
-/>
-<img
-  src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts1.png"
-  alt="plpts animated gif"
-  style="
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-  "
-/>
-<img
-  src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts2.png"
-  alt="plpts animated gif"
-  style="
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-  "
-/>
+| Özellik | Detay |
+|---------|-------|
+| 🌐 **Kaynak** | `developer.pisilinux.org/packages/search/[a-z]` |
+| 🔄 **Otomatik tarama** | 26 harfi sırayla çeker, toplam ~6500 paket |
+| 🔍 **Canlı arama** | Ad, sürüm, kategori, açıklama |
+| 🗂️ **Filtreler** | Kategori + depo (main/contrib) + durum chip'leri |
+| 💾 **localStorage önbelleki** | 30 dakika — sayfayı kapatıp açınca yeniden yüklemez |
+| 📥 **CSV dışa aktarma** | Görünen listeyi UTF-8 BOM'lu CSV olarak indir |
+| 📱 **Mobil uyumlu** | 320px kart görünümü, tablet orta sütun gizleme |
+| 🛡️ **Güvenli** | XSS `escHtml()`, SSRF host kontrolü, input sanitize, CSP |
+
 ---
 
 ## 🚀 Kurulum
 
-### Seçenek 1 — Doğrudan aç (en kolay)
+### En kolay: Yerel sunucu
 
 ```bash
+# 1) İndir / klonla
 git clone https://github.com/KULLANICI/pisilinux-tracker.git
 cd pisilinux-tracker
-# index.html dosyasını tarayıcınızda açın
-```
 
-> ⚠️ Bazı tarayıcılar `file://` protokolünde CORS kısıtlar. Aşağıdaki yöntemler daha güvenilirdir.
-
-### Seçenek 2 — Yerel sunucu
-
-```bash
-# Python 3
+# 2) Yerel sunucu başlat (CORS için gerekli)
 python3 -m http.server 8080
+# veya: npx serve .
+# veya: php -S localhost:8080
 
-# Node.js
-npx serve .
-
-# Tarayıcı: http://localhost:8080
+# 3) Tarayıcıda aç
+# http://localhost:8080
 ```
 
-### Seçenek 3 — GitHub Pages
+> ⚠️ **Önemli:** `file://` protokolüyle açıldığında bazı tarayıcılar `developer.pisilinux.org`'a yapılan istekleri CORS kuralı nedeniyle bloklar.
+> Yerel bir sunucu (`http://localhost`) üzerinden çalıştırın.
+
+### GitHub Pages
 
 1. Repoyu fork'layın
 2. **Settings → Pages → Source: `main` / `/ (root)`**
@@ -100,11 +67,47 @@ npx serve .
 
 ```
 pisilinux-tracker/
-├── index.html   ← HTML yapısı, CSP, ARIA
-├── styles.css   ← Dark tema, mobile-first CSS
-├── tracker.js   ← API istemcisi, güvenlik, önbellek
+├── index.html   ← HTML, CSP, ARIA erişilebilirlik
+├── styles.css   ← Dark tema, mobile-first, CSS Grid kart görünümü
+├── tracker.js   ← Tarayıcı, parser, önbellek, CSV, güvenlik
 └── README.md
 ```
+
+---
+
+## 🔄 Nasıl Çalışır
+
+```
+Yükle butonu
+    │
+    ├─► localStorage'dan önbellek var mı?
+    │       Evet → Direkt göster (30 dk geçerli)
+    │       Hayır ↓
+    │
+    ├─► /packages/search/a  → HTML → DOMParser → paket listesi
+    ├─► /packages/search/b  → ...
+    │   ... (26 harf)
+    ├─► /packages/search/z  → ...
+    │
+    ├─► Tüm paketleri birleştir (≈ 6500)
+    ├─► Durum heuristiği uygula (sürüm bazlı)
+    ├─► localStorage'a kaydet
+    └─► Tabloya render et
+```
+
+---
+
+## 🟢 Durum Mantığı
+
+Gerçek tarih bilgisi olmadığı için sürüm bazlı heuristik uygulanır:
+
+| Durum | Kriter |
+|-------|--------|
+| ✅ **Güncel** | Sürümde 2024+ yıl içeriyor veya normal versiyon |
+| ⚠️ **Orta** | contrib deposu, alt paket (-devel/-docs/-32bit) veya 2020-2023 yıl |
+| ❌ **Eski** | Sürümde < 2020 yıl tarihi |
+
+> Gerçek güncelleme tarihi için GitHub commit geçmişine bakılması gerekir.
 
 ---
 
@@ -112,64 +115,36 @@ pisilinux-tracker/
 
 | Katman | Uygulama |
 |--------|----------|
-| **CSP** | `connect-src` yalnızca `api.github.com` |
-| **XSS** | Tüm API verileri `escHtml()` ile sanitize |
-| **SSRF** | Her `fetch` öncesi hostname doğrulaması |
-| **URL** | Tüm bağlantılar `safeUrl()` ile `github.com` whitelist kontrolü |
-| **Input** | Arama girdisi özel karakter temizleme + 100 karakter sınırı |
-| **Rate limit** | `X-RateLimit-Remaining` izleme + kullanıcı uyarısı |
-
----
-
-## ⚡ GitHub API Limitleri
-
-Token olmadan: **60 istek/saat**
-
-| İşlem | İstek sayısı |
-|-------|-------------|
-| Kategoriler | 1 |
-| Paket listesi | ~kategori sayısı |
-| pspec.xml + commit / paket | 2 |
-| Toplam (~1800 paket) | ~3700 |
-
-**Bu nedenle:**
-- İlk yükleme 15 dakika önbelleğe alır
-- "Yenile" butonu önbelleği temizleyip yeniden çeker
-- Kısa aralıklarla defalarca çalıştırmaktan kaçının
-
----
-
-## 📊 Durum Eşikleri
-
-| Durum | Kriter |
-|-------|--------|
-| ✅ Güncel | Son 7 gün içinde güncellendi |
-| ⚠️ Orta | 7–30 gün arası |
-| ❌ Eski | 30 günden uzun süredir güncellenmedi |
-
-`tracker.js` → `THRESHOLDS` sabitinden değiştirilebilir.
+| **CSP** | `connect-src` yalnızca `developer.pisilinux.org` |
+| **XSS** | Tüm site verisi `escHtml()` ile sanitize |
+| **SSRF** | Her `fetch` öncesi hostname `developer.pisilinux.org` kontrolü |
+| **URL** | `safeUrl()` ile yalnızca güvenli HTTPS bağlantıları |
+| **Input** | Arama: özel karakter temizleme + 100 karakter sınırı |
 
 ---
 
 ## 📱 Mobil Davranış
 
-- **≤ 540px** → Tablo satırları karta dönüşür (CSS Grid)
-- **541–768px** → Boyut ve Sistem sütunları gizlenir
-- **≥ 769px** → Tam tablo görünümü
+| Ekran | Görünüm |
+|-------|---------|
+| **≤ 540px** | Tablo satırları CSS Grid kartlara dönüşür |
+| **541–768px** | Kategori sütunu gizlenir |
+| **≥ 769px** | Tam 6 sütunlu tablo |
 
 ---
 
 ## 🌐 Tarayıcı Desteği
 
-Chrome 90+, Firefox 90+, Safari 14+, Samsung Internet 14+
+Chrome 90+, Firefox 90+, Safari 14+, Edge 90+
 
 ---
 
 ## 🔗 Bağlantılar
 
 - 🐧 [pisilinux.org](https://pisilinux.org)
+- 🛠️ [developer.pisilinux.org](https://developer.pisilinux.org)
 - 🐙 [github.com/pisilinux](https://github.com/pisilinux)
-- 📦 [github.com/pisilinux/main](https://github.com/pisilinux/main)
+- 📦 [Paket listesi](https://developer.pisilinux.org/packages)
 
 ---
 
