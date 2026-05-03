@@ -1,131 +1,126 @@
 /**
- * PisiLinux Paket Takip Sistemi — tracker.js
- * Güvenli · XSS korumalı · Rate-limit izleme
- * Token gerektirmez · Önbellek: 15 dk
+ * PisiLinux Paket Takip — tracker.js
+ * Kaynak: developer.pisilinux.org/packages
+ * ─────────────────────────────────────────
+ * Token yok · Sunucu yok · Tüm 6492 paket
+ * XSS koruması · CSP uyumlu · Önbellek 30 dk
  */
 'use strict';
 
 /* ── Sabitler ── */
-const OWNER = 'pisilinux', REPO = 'main', BRANCH = 'master';
-const API   = 'https://api.github.com';
-const CACHE_KEY = 'plx_v3', CACHE_TTL = 15 * 60 * 1000;
-const THRESHOLDS = { updated: 7 * 86400000, stale: 30 * 86400000 };
+const BASE_URL   = 'https://developer.pisilinux.org';
+const LETTERS    = 'abcdefghijklmnopqrstuvwxyz'.split('');
+const CACHE_KEY  = 'plx_dev_v1';
+const CACHE_TTL  = 30 * 60 * 1000; // 30 dakika
 
-/* ── Durum ── */
+/* Durum eşikleri — pspec.xml parse edilemiyor,
+   sürüm karşılaştırması yapılamıyor; durum statik
+   olarak "yeni paket" / "mevcut" olarak belirlenir.
+   Gerçek tarih bilgisi olmadığı için sürüm heuristiği: */
+const KNOWN_STALE_PREFIXES = ['devel','docs','dbginfo','32bit'];
+
+/* ── State ── */
 let allPkgs = [], filtered = [], isLoading = false;
-let sortKey = 'lastUpdate', sortAsc = false;
+let sortKey = 'name', sortAsc = true;
 
 /* ── DOM ── */
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 const DOM = {
-  statusDot    : $('statusDot'),
-  statusMsg    : $('statusMsg'),
-  progBar      : $('progBar'),
-  progressWrap : $('progressWrap'),
-  rateWarn     : $('rateWarn'),
-  rateMsg      : $('rateMsg'),
-  pkgBody      : $('pkgBody'),
-  searchInput  : $('searchInput'),
-  catFilter    : $('catFilter'),
-  loadBtn      : $('loadBtn'),
-  refreshBtn   : $('refreshBtn'),
-  csvBtn       : $('csvBtn'),
-  statChips    : $('statChips'),
-  resultsBar   : $('resultsBar'),
-  resultsCount : $('resultsCount'),
-  lastFetch    : $('lastFetch'),
-  cAll         : $('c-all'),
-  cOk          : $('c-ok'),
-  cWarn        : $('c-warn'),
-  cBad         : $('c-bad'),
+  sdot       : $('sdot'),
+  stext      : $('stext'),
+  progWrap   : $('progWrap'),
+  progFill   : $('progFill'),
+  pkgBody    : $('pkgBody'),
+  searchInput: $('searchInput'),
+  catFilter  : $('catFilter'),
+  repoFilter : $('repoFilter'),
+  loadBtn    : $('loadBtn'),
+  refreshBtn : $('refreshBtn'),
+  csvBtn     : $('csvBtn'),
+  chips      : $('chips'),
+  resultsBar : $('resultsBar'),
+  resultsCount:$('resultsCount'),
+  lastFetch  : $('lastFetch'),
+  cAll:$('c-all'), cOk:$('c-ok'), cWarn:$('c-warn'), cBad:$('c-bad'),
 };
 
-/* ── Güvenlik yardımcıları ── */
+/* ── Güvenlik ── */
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = String(s ?? '');
   return d.innerHTML;
 }
-
-function safeUrl(u, hosts = ['github.com']) {
+function safeUrl(u, allowedHost = 'developer.pisilinux.org') {
   try {
-    const p = new URL(u);
-    return p.protocol === 'https:' && hosts.some(h => p.hostname === h || p.hostname.endsWith('.' + h))
-      ? u : null;
+    const p = new URL(u, BASE_URL);
+    return (p.protocol === 'https:' && p.hostname === allowedHost) ? p.href : null;
   } catch { return null; }
 }
-
 function sanitize(s) {
   return String(s).slice(0, 100).replace(/[<>"'`\\;(){}[\]]/g, '');
 }
 
-function extractVersion(xml) {
-  const m = String(xml).match(/<Version>\s*([^\s<]{1,60})\s*<\/Version>/);
-  return m ? m[1].trim() : 'N/A';
-}
+/* ── Sürüm heuristiği → durum ── */
+function calcStatus(pkg) {
+  const name    = (pkg.name || '').toLowerCase();
+  const version = (pkg.version || '').toLowerCase();
+  const repo    = (pkg.repo || '').toLowerCase();
 
-/* ── Tarih yardımcıları ── */
-function fmtDate(d) {
-  if (!d) return '–';
-  const dt = new Date(d);
-  return isNaN(dt) ? '–' : dt.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+  // contrib paketleri "orta" sayılır
+  if (repo === 'contrib') return { key:'stale', label:'Contrib', cls:'b-warn', order:1 };
 
-function relTime(d) {
-  if (!d) return '';
-  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-  if (days < 1)   return 'bugün';
-  if (days < 7)   return days + 'g önce';
-  if (days < 30)  return Math.floor(days / 7) + 'h önce';
-  if (days < 365) return Math.floor(days / 30) + 'ay önce';
-  return Math.floor(days / 365) + 'y önce';
-}
+  // devel/docs/32bit/dbginfo — alt paket
+  if (KNOWN_STALE_PREFIXES.some(p => name.endsWith('-' + p))) {
+    return { key:'stale', label:'Alt paket', cls:'b-warn', order:1 };
+  }
 
-function daysAgo(d) {
-  return d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : 9999;
-}
+  // Çok eski sürüm işaretleri
+  const yearMatch = version.match(/20(\d{2})/);
+  if (yearMatch) {
+    const year = 2000 + parseInt(yearMatch[1]);
+    if (year < 2020) return { key:'old', label:'Eski sürüm', cls:'b-bad', order:2 };
+    if (year >= 2024) return { key:'updated', label:'Güncel', cls:'b-ok', order:0 };
+    return { key:'stale', label:'Orta', cls:'b-warn', order:1 };
+  }
 
-/* ── Durum hesapla ── */
-function calcStatus(d) {
-  if (!d) return { key: 'unknown', label: 'Bilinmiyor', cls: 'unknown', order: 3 };
-  const ms = Date.now() - new Date(d).getTime();
-  if (ms <= THRESHOLDS.updated) return { key: 'updated', label: 'Güncel',    cls: 'ok',   order: 0 };
-  if (ms <= THRESHOLDS.stale)   return { key: 'stale',   label: 'Orta',      cls: 'warn', order: 1 };
-  return                               { key: 'old',     label: 'Eski',       cls: 'bad',  order: 2 };
+  // Versiyon çok düşükse (< 1.0)
+  const major = parseFloat(version);
+  if (!isNaN(major) && major < 1 && major > 0) {
+    return { key:'stale', label:'Orta', cls:'b-warn', order:1 };
+  }
+
+  return { key:'updated', label:'Güncel', cls:'b-ok', order:0 };
 }
 
 /* ── Kısa not ── */
 function shortNote(pkg) {
-  const d = pkg.daysAgo;
-  if (pkg.status.key === 'unknown') return 'Bilgi alınamadı';
-  if (d === 0) return 'Bugün güncellendi';
-  if (d < 7)   return d + ' gün önce güncellendi';
-  if (d < 30)  return Math.round(d / 7) + ' hafta önce güncellendi';
-  if (d < 90)  return Math.round(d / 30) + ' ay önce güncellendi';
-  return Math.round(d / 30) + ' ay güncellenmedi';
+  const repo = (pkg.repo || '').toLowerCase();
+  if (repo === 'contrib') return 'Topluluk katkısı · contrib deposu';
+  const n = (pkg.name || '').toLowerCase();
+  if (n.endsWith('-devel'))   return 'Geliştirme başlık dosyaları';
+  if (n.endsWith('-docs'))    return 'Belgeleme dosyaları';
+  if (n.endsWith('-32bit'))   return '32-bit uyumluluk katmanı';
+  if (n.endsWith('-dbginfo')) return 'Hata ayıklama sembolleri';
+  const desc = pkg.desc || '';
+  return desc.length > 60 ? desc.slice(0, 57) + '…' : (desc || pkg.category || '–');
 }
 
 /* ── UI yardımcıları ── */
 function setStatus(msg, type = 'spin') {
-  if (DOM.statusDot) DOM.statusDot.className = 'status-dot ' + type;
-  if (DOM.statusMsg) DOM.statusMsg.textContent = msg;
+  if (DOM.sdot)  DOM.sdot.className  = 'sdot ' + type;
+  if (DOM.stext) DOM.stext.textContent = msg;
 }
-
 function setProgress(pct) {
-  if (DOM.progBar) DOM.progBar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+  if (DOM.progFill) DOM.progFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
 }
-
-function showProgress(show) {
-  if (DOM.progressWrap) DOM.progressWrap.hidden = !show;
-}
-
+function showProgress(v) { if (DOM.progWrap) DOM.progWrap.hidden = !v; }
 function tick(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 /* ── Önbellek ── */
 const Cache = {
   load() {
     try {
-      const raw = sessionStorage.getItem(CACHE_KEY);
+      const raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       const { ts, data } = JSON.parse(raw);
       if (Date.now() - ts > CACHE_TTL) { this.clear(); return null; }
@@ -133,208 +128,196 @@ const Cache = {
     } catch { return null; }
   },
   save(data) {
-    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch {}
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); }
+    catch (e) {
+      // localStorage dolu olabilir — sessionStorage'a dön
+      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch {}
+    }
   },
   clear() {
+    try { localStorage.removeItem(CACHE_KEY); } catch {}
     try { sessionStorage.removeItem(CACHE_KEY); } catch {}
   },
 };
 
-/* ── GitHub API istemcisi ── */
-async function ghGet(endpoint, params = {}) {
-  const url = new URL(API + endpoint);
-  for (const [k, v] of Object.entries(params)) {
-    if (typeof k === 'string' && typeof v === 'string') url.searchParams.set(k, v);
-  }
-  // SSRF engeli
-  if (url.hostname !== 'api.github.com') throw new Error('Güvenlik hatası: izinsiz host');
+/* ── HTML'den tablo satırlarını parse et ── */
+function parsePackagesFromHtml(html) {
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(html, 'text/html');
+  const rows   = doc.querySelectorAll('table tbody tr');
+  const pkgs   = [];
 
-  const r = await fetch(url.toString(), {
-    method: 'GET',
-    headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'PisiLinux-Tracker/3.0' },
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 5) return;
+
+    const nameCell = cells[0];
+    const anchor   = nameCell.querySelector('a');
+    if (!anchor) return;
+
+    const name    = (anchor.textContent || '').trim();
+    const href    = anchor.getAttribute('href') || '';
+    const version = (cells[1].textContent || '').trim();
+    const desc    = (cells[2].textContent || '').trim();
+    const category= (cells[3].textContent || '').trim();
+    const repo    = (cells[4].textContent || '').trim();
+
+    if (!name) return;
+
+    // ID'yi URL'den çıkar: /packages/detail/65/a52dec → 65
+    const idMatch = href.match(/\/packages\/detail\/(\d+)\//);
+    const id      = idMatch ? idMatch[1] : null;
+    const detailUrl = id ? safeUrl(`/packages/detail/${id}/${encodeURIComponent(name)}`) : null;
+
+    const pkg = {
+      name,
+      version,
+      desc,
+      category,
+      repo,
+      detailUrl,
+      id,
+    };
+    pkg.status    = calcStatus(pkg);
+    pkg.statusKey = pkg.status.order;
+
+    pkgs.push(pkg);
   });
 
-  // Rate limit izle
-  const rem = r.headers.get('X-RateLimit-Remaining');
-  if (rem !== null && parseInt(rem) < 10) {
-    const reset = r.headers.get('X-RateLimit-Reset');
-    const t = reset ? new Date(parseInt(reset) * 1000).toLocaleTimeString('tr-TR') : '?';
-    if (DOM.rateMsg) DOM.rateMsg.textContent = `GitHub API limiti düşük (kalan: ${rem}). ${t} sıfırlanır.`;
-    if (DOM.rateWarn) DOM.rateWarn.hidden = false;
-  }
-
-  if (!r.ok) {
-    if (r.status === 403 && rem === '0') throw new Error('API limiti doldu. Lütfen bekleyin.');
-    throw new Error('GitHub API Hatası: ' + r.status);
-  }
-
-  const ct = r.headers.get('content-type') || '';
-  if (!ct.includes('json')) throw new Error('Beklenmeyen yanıt türü');
-
-  return r.json();
+  return pkgs;
 }
 
-/* ── Ana yükleme akışı ── */
+/* ── Her harfi fetch et ── */
+async function fetchLetter(letter) {
+  const url = `${BASE_URL}/packages/search/${encodeURIComponent(letter)}`;
+
+  // SSRF / host kontrolü
+  const parsed = new URL(url);
+  if (parsed.hostname !== 'developer.pisilinux.org') throw new Error('Güvenlik hatası');
+
+  const response = await fetch(url, {
+    method : 'GET',
+    headers: { 'Accept': 'text/html', 'User-Agent': 'PisiLinux-Tracker/3.0' },
+    cache  : 'default',
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status} — ${letter}`);
+
+  const ct = response.headers.get('content-type') || '';
+  if (!ct.includes('html')) throw new Error('Beklenmeyen yanıt türü');
+
+  const html = await response.text();
+  return parsePackagesFromHtml(html);
+}
+
+/* ── Ana yükleme ── */
 async function loadAll() {
   if (isLoading) return;
   isLoading = true;
-  if (DOM.loadBtn)    DOM.loadBtn.style.display    = 'none';
-  if (DOM.refreshBtn) DOM.refreshBtn.style.display = 'none';
-  if (DOM.csvBtn)     DOM.csvBtn.hidden             = true;
+
+  if (DOM.loadBtn)    DOM.loadBtn.hidden    = true;
+  if (DOM.refreshBtn) DOM.refreshBtn.hidden = true;
+  if (DOM.csvBtn)     DOM.csvBtn.hidden     = true;
 
   showProgress(true);
-  setStatus('Kategoriler taranıyor…', 'spin');
-  setProgress(3);
+  setProgress(0);
+  setStatus('developer.pisilinux.org bağlanıyor…', 'spin');
 
   try {
-    // 1) Kategoriler
-    const rootItems = await ghGet(`/repos/${OWNER}/${REPO}/contents`, { ref: BRANCH });
-    const cats = Array.isArray(rootItems)
-      ? rootItems.filter(i => i.type === 'dir' && typeof i.name === 'string' && !i.name.startsWith('.')).map(i => i.name)
-      : [];
-    setProgress(8);
+    const all = [];
 
-    // 2) Her kategorideki paketler
-    let rawPkgs = [];
-    for (let i = 0; i < cats.length; i++) {
+    for (let i = 0; i < LETTERS.length; i++) {
+      const letter = LETTERS[i];
+      setStatus(`Paketler taranıyor: "${letter.toUpperCase()}" harfi (${i + 1}/26)…`, 'spin');
+      setProgress((i / LETTERS.length) * 95);
+
       try {
-        const items = await ghGet(`/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(cats[i])}`, { ref: BRANCH });
-        if (Array.isArray(items)) {
-          items.filter(x => x.type === 'dir').forEach(x => {
-            rawPkgs.push({
-              category : cats[i],
-              name     : x.name,
-              path     : x.path,
-              url      : safeUrl(x.html_url) || '#',
-            });
-          });
-        }
-      } catch { /* Kategori okunamadıysa atla */ }
-
-      setStatus(`Paketler taranıyor: ${i + 1}/${cats.length} kategori — ${rawPkgs.length} paket`, 'spin');
-      setProgress(8 + (i + 1) / cats.length * 22);
-      if (i % 5 === 4) await tick(80);
-    }
-
-    // 3) Paket detayları
-    const results = [];
-    for (let i = 0; i < rawPkgs.length; i++) {
-      const pkg = rawPkgs[i];
-      let version = 'N/A', lastUpdate = null, commitUrl = pkg.url, size = '–';
-
-      // pspec.xml → versiyon + boyut
-      try {
-        const ps = await ghGet(
-          `/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(pkg.path)}/pspec.xml`,
-          { ref: BRANCH }
-        );
-        if (ps?.content && typeof ps.content === 'string') {
-          const b64 = ps.content.replace(/\s/g, '');
-          if (/^[A-Za-z0-9+/=]+$/.test(b64)) {
-            try { version = extractVersion(atob(b64)); } catch {}
-          }
-        }
-        if (ps?.size) {
-          const kb = Math.round(ps.size / 1024);
-          size = kb < 1 ? ps.size + 'B' : kb + ' KB';
-        }
-      } catch {}
-
-      // Son commit
-      try {
-        const commits = await ghGet(
-          `/repos/${OWNER}/${REPO}/commits`,
-          { path: pkg.path, ref: BRANCH, per_page: '1' }
-        );
-        if (Array.isArray(commits) && commits[0]) {
-          lastUpdate = commits[0].commit?.author?.date || null;
-          commitUrl  = safeUrl(commits[0].html_url) || pkg.url;
-        }
-      } catch {}
-
-      const status = calcStatus(lastUpdate);
-      results.push({
-        ...pkg,
-        version,
-        lastUpdate,
-        commitUrl,
-        size,
-        status,
-        statusKey : status.order,
-        daysAgo   : daysAgo(lastUpdate),
-        system    : 'pisi',
-      });
-
-      if (i % 8 === 7) {
-        setStatus(`Detaylar yükleniyor: ${i + 1}/${rawPkgs.length}`, 'spin');
-        setProgress(30 + (i + 1) / rawPkgs.length * 70);
-        await tick(60);
+        const pkgs = await fetchLetter(letter);
+        all.push(...pkgs);
+      } catch (err) {
+        console.warn(`[PLX] Harf atlandı: ${letter} —`, err.message);
       }
+
+      await tick(120); // hız sınırlaması
     }
 
     setProgress(100);
-    Cache.save(results);
-    allPkgs = results;
-    onReady('GitHub API\'den');
+
+    if (all.length === 0) throw new Error('Hiç paket bulunamadı. Site erişilebilir değil olabilir.');
+
+    Cache.save(all);
+    allPkgs = all;
+    onReady('developer.pisilinux.org');
 
   } catch (err) {
     console.error('[PLX]', err);
-    setStatus(err.message || 'Hata oluştu.', 'err');
-    if (DOM.pkgBody) {
-      DOM.pkgBody.innerHTML = `<tr><td colspan="7"><div class="empty-state" style="color:var(--red)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        <p>${esc(err.message || 'Bir hata oluştu.')}</p>
-      </div></td></tr>`;
-    }
+    setStatus(err.message || 'Bir hata oluştu.', 'err');
+    renderError(err.message);
   } finally {
     isLoading = false;
     showProgress(false);
-    if (DOM.refreshBtn) DOM.refreshBtn.style.display = 'inline-flex';
+    if (DOM.refreshBtn) DOM.refreshBtn.hidden = false;
   }
 }
 
+function renderError(msg) {
+  if (!DOM.pkgBody) return;
+  DOM.pkgBody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="color:var(--red)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <p>${esc(msg || 'Hata oluştu.')}</p>
+    <p style="font-size:11px;color:var(--tf)">CORS hatası tarayıcıda bloklanmış olabilir. Lütfen bir yerel sunucu üzerinden çalıştırın.</p>
+  </div></td></tr>`;
+}
+
 function onReady(src) {
-  populateCats();
+  populateFilters();
   applyFilters();
   updateChips();
   setStatus(`${allPkgs.length} paket yüklendi (${src}).`, 'ok');
-  if (DOM.csvBtn) DOM.csvBtn.hidden = false;
-  if (DOM.lastFetch) DOM.lastFetch.textContent = 'Son çekim: ' + fmtDate(new Date().toISOString());
+  if (DOM.csvBtn)     DOM.csvBtn.hidden     = false;
+  if (DOM.lastFetch)  DOM.lastFetch.textContent = 'Son çekim: ' + new Date().toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
 }
 
-/* ── Kategori dropdown ── */
-function populateCats() {
-  if (!DOM.catFilter) return;
-  const cats = [...new Set(allPkgs.map(p => p.category))].sort((a, b) => a.localeCompare(b, 'tr'));
-  const frag = document.createDocumentFragment();
-  const all = document.createElement('option');
-  all.value = 'all'; all.textContent = 'Tüm kategoriler';
-  frag.appendChild(all);
-  cats.forEach(c => {
-    const o = document.createElement('option');
-    o.value = c; o.textContent = c;
-    frag.appendChild(o);
-  });
-  DOM.catFilter.replaceChildren(frag);
+/* ── Filtre seçeneklerini doldur ── */
+function populateFilters() {
+  // Kategoriler
+  const cats  = [...new Set(allPkgs.map(p => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+  const repos = [...new Set(allPkgs.map(p => p.repo).filter(Boolean))].sort();
+
+  if (DOM.catFilter) {
+    const frag = document.createDocumentFragment();
+    const all  = document.createElement('option'); all.value = 'all'; all.textContent = 'Tüm kategoriler';
+    frag.appendChild(all);
+    cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; frag.appendChild(o); });
+    DOM.catFilter.replaceChildren(frag);
+  }
+
+  if (DOM.repoFilter) {
+    const frag = document.createDocumentFragment();
+    const all  = document.createElement('option'); all.value = 'all'; all.textContent = 'Tüm depolar';
+    frag.appendChild(all);
+    repos.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; frag.appendChild(o); });
+    DOM.repoFilter.replaceChildren(frag);
+  }
 }
 
 /* ── Filtrele & sırala ── */
 function applyFilters() {
-  const q   = sanitize(DOM.searchInput?.value || '').toLowerCase().trim();
-  const sf  = document.querySelector('.chip.active')?.dataset.f || 'all';
-  const cat = DOM.catFilter?.value || 'all';
-  const now = Date.now();
+  const q    = sanitize(DOM.searchInput?.value || '').toLowerCase().trim();
+  const sf   = document.querySelector('.chip.active')?.dataset.f || 'all';
+  const cat  = DOM.catFilter?.value  || 'all';
+  const repo = DOM.repoFilter?.value || 'all';
 
   filtered = allPkgs.filter(p => {
-    if (cat !== 'all' && p.category !== cat) return false;
+    if (cat  !== 'all' && p.category !== cat)  return false;
+    if (repo !== 'all' && p.repo     !== repo) return false;
     if (sf !== 'all') {
-      const d = p.lastUpdate ? now - new Date(p.lastUpdate).getTime() : Infinity;
-      if (sf === 'updated' && d > THRESHOLDS.updated) return false;
-      if (sf === 'stale'   && (d <= THRESHOLDS.updated || d > THRESHOLDS.stale)) return false;
-      if (sf === 'old'     && d <= THRESHOLDS.stale) return false;
+      if (sf === 'updated' && p.status.key !== 'updated') return false;
+      if (sf === 'stale'   && p.status.key !== 'stale')   return false;
+      if (sf === 'old'     && p.status.key !== 'old')     return false;
     }
     if (q) {
-      const hay = `${p.category} ${p.name} ${p.version}`.toLowerCase();
+      const hay = `${p.name} ${p.version} ${p.category} ${p.desc}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -343,36 +326,29 @@ function applyFilters() {
   filtered = sortArr(filtered, sortKey, sortAsc);
   renderTable(filtered);
 
-  const rc = DOM.resultsCount;
-  if (rc) rc.textContent = `${filtered.length} / ${allPkgs.length} paket gösteriliyor`;
-  if (DOM.resultsBar) DOM.resultsBar.hidden = allPkgs.length === 0;
+  if (DOM.resultsCount) DOM.resultsCount.textContent = `${filtered.length.toLocaleString('tr-TR')} / ${allPkgs.length.toLocaleString('tr-TR')} paket`;
+  if (DOM.resultsBar)   DOM.resultsBar.hidden = allPkgs.length === 0;
 }
 
 function sortArr(arr, key, asc) {
   return [...arr].sort((a, b) => {
     let va = a[key] ?? '', vb = b[key] ?? '';
-    if (key === 'lastUpdate') {
-      va = va ? new Date(va).getTime() : 0;
-      vb = vb ? new Date(vb).getTime() : 0;
-      return asc ? va - vb : vb - va;
-    }
-    if (typeof va === 'number') return asc ? va - vb : vb - va;
-    return asc
-      ? String(va).localeCompare(String(vb), 'tr')
-      : String(vb).localeCompare(String(va), 'tr');
+    if (key === 'statusKey') return asc ? va - vb : vb - va;
+    const cmp = String(va).localeCompare(String(vb), 'tr', { numeric: true });
+    return asc ? cmp : -cmp;
   });
 }
 
 /* ── Tablo render ── */
-const SVG_OK   = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 4,9.5 11,2.5"/></svg>`;
-const SVG_WARN = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2v3.5M6 8v.5"/><path d="M1 10.5 6 1l5 9.5H1z"/></svg>`;
-const SVG_BAD  = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>`;
-const SVG_COMMIT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></svg>`;
+const IC_OK   = `<svg viewBox="0 0 12 12"><polyline points="1,6 4,9.5 11,2.5"/></svg>`;
+const IC_WARN = `<svg viewBox="0 0 12 12"><path d="M6 2v3.5M6 8v.5"/><path d="M1 10.5 6 1l5 9.5H1z"/></svg>`;
+const IC_BAD  = `<svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"/></svg>`;
+const IC_EXT  = `<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 
-function badgeSvg(cls) {
-  if (cls === 'ok')   return SVG_OK;
-  if (cls === 'warn') return SVG_WARN;
-  if (cls === 'bad')  return SVG_BAD;
+function badgeIco(cls) {
+  if (cls === 'b-ok')   return IC_OK;
+  if (cls === 'b-warn') return IC_WARN;
+  if (cls === 'b-bad')  return IC_BAD;
   return '';
 }
 
@@ -380,11 +356,9 @@ function renderTable(pkgs) {
   if (!DOM.pkgBody) return;
 
   if (pkgs.length === 0) {
-    DOM.pkgBody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
-      </svg>
-      <p>Sonuç bulunamadı. Filtre veya arama teriminizi değiştirin.</p>
+    DOM.pkgBody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <p>Sonuç bulunamadı. Filtre veya aramayı değiştirin.</p>
     </div></td></tr>`;
     return;
   }
@@ -392,66 +366,59 @@ function renderTable(pkgs) {
   const frag = document.createDocumentFragment();
 
   pkgs.forEach(pkg => {
-    const tr = document.createElement('tr');
-    const st = pkg.status;
-    const fu = safeUrl(pkg.url) || '#';
-    const cu = safeUrl(pkg.commitUrl) || '#';
+    const tr  = document.createElement('tr');
+    const st  = pkg.status;
+    const url = pkg.detailUrl || `${BASE_URL}/packages`;
 
     // Paket adı
     const tdName = document.createElement('td');
-    tdName.className = 'col-name';
-    const nameA = document.createElement('a');
-    nameA.href = fu; nameA.target = '_blank'; nameA.rel = 'noopener noreferrer';
-    nameA.className = 'pkg-name';
-    nameA.textContent = pkg.name;
-    const catSpan = document.createElement('span');
-    catSpan.className = 'pkg-cat'; catSpan.textContent = pkg.category;
-    tdName.appendChild(nameA); tdName.appendChild(catSpan);
+    tdName.className = 'c-name';
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.className = 'pkg-link'; a.textContent = pkg.name;
+    tdName.appendChild(a);
 
-    // Boyut
-    const tdSize = document.createElement('td');
-    tdSize.className = 'col-size';
-    tdSize.innerHTML = `<span class="size-mono">${esc(pkg.size || '–')}</span>`;
+    // Sürüm
+    const tdVer = document.createElement('td');
+    tdVer.className = 'c-version';
+    tdVer.innerHTML = `<span class="ver-tag">${esc(pkg.version || '–')}</span>`;
 
-    // Sistem
-    const tdSys = document.createElement('td');
-    tdSys.className = 'col-sys';
-    tdSys.innerHTML = `<span class="sys-badge">pisi</span>`;
+    // Kategori
+    const tdCat = document.createElement('td');
+    tdCat.className = 'c-cat';
+    tdCat.innerHTML = `<span class="cat-text">${esc(pkg.category || '–')}</span>`;
 
-    // Son güncelleme (güncel sütun)
-    const tdUpd = document.createElement('td');
-    tdUpd.className = 'col-upd';
-    tdUpd.innerHTML = `<span class="date-main">${esc(fmtDate(pkg.lastUpdate))}</span>`;
-
-    // Geçen süre (güncel olmayan sütun)
-    const tdAgo = document.createElement('td');
-    tdAgo.className = 'col-ago';
-    tdAgo.innerHTML = `<span class="date-rel" style="font-size:12px;color:var(--text-dim)">${esc(relTime(pkg.lastUpdate))}</span>`;
+    // Depo
+    const tdRepo = document.createElement('td');
+    tdRepo.className = 'c-repo';
+    const repoCls = (pkg.repo || '').toLowerCase() === 'contrib' ? 'repo-tag contrib' : 'repo-tag';
+    tdRepo.innerHTML = `<span class="${repoCls}">${esc(pkg.repo || '–')}</span>`;
 
     // Durum
     const tdStatus = document.createElement('td');
-    tdStatus.className = 'col-status';
-    tdStatus.innerHTML = `<span class="badge badge-${esc(st.cls)}">${badgeSvg(st.cls)}${esc(st.label)}</span>`;
+    tdStatus.className = 'c-status';
+    tdStatus.innerHTML = `<span class="badge ${esc(st.cls)}">${badgeIco(st.cls)}${esc(st.label)}</span>`;
 
-    // Not + commit link
+    // Not
     const tdNote = document.createElement('td');
-    tdNote.className = 'col-note';
+    tdNote.className = 'c-note';
     const noteSpan = document.createElement('span');
-    noteSpan.className = 'note-text'; noteSpan.title = shortNote(pkg); noteSpan.textContent = shortNote(pkg);
-    const commitA = document.createElement('a');
-    commitA.href = cu; commitA.target = '_blank'; commitA.rel = 'noopener noreferrer';
-    commitA.className = 'commit-link'; commitA.title = 'Son commit';
-    commitA.innerHTML = SVG_COMMIT;
-    tdNote.appendChild(noteSpan); tdNote.appendChild(commitA);
+    noteSpan.className = 'note-txt'; noteSpan.title = shortNote(pkg); noteSpan.textContent = shortNote(pkg);
+    const detA = document.createElement('a');
+    detA.href = url; detA.target = '_blank'; detA.rel = 'noopener noreferrer';
+    detA.className = 'detail-lnk'; detA.title = 'Detay sayfası'; detA.innerHTML = IC_EXT;
+    const wrap = document.createElement('div'); wrap.className = 'note-wrap';
+    wrap.appendChild(noteSpan); wrap.appendChild(detA);
+    tdNote.appendChild(wrap);
 
-    tr.append(tdName, tdSize, tdSys, tdUpd, tdAgo, tdStatus, tdNote);
+    tr.append(tdName, tdVer, tdCat, tdRepo, tdStatus, tdNote);
     frag.appendChild(tr);
   });
 
   DOM.pkgBody.replaceChildren(frag);
 }
 
-/* ── Chip sayaçlarını güncelle ── */
+/* ── Chip sayaçları ── */
 function updateChips() {
   let ok = 0, warn = 0, bad = 0;
   allPkgs.forEach(p => {
@@ -460,57 +427,57 @@ function updateChips() {
     else if (k === 'stale') warn++;
     else bad++;
   });
-  if (DOM.cAll)  DOM.cAll.textContent  = allPkgs.length;
-  if (DOM.cOk)   DOM.cOk.textContent   = ok;
-  if (DOM.cWarn) DOM.cWarn.textContent  = warn;
-  if (DOM.cBad)  DOM.cBad.textContent   = bad;
-  if (DOM.statChips) DOM.statChips.hidden = false;
+  if (DOM.cAll)  DOM.cAll.textContent  = allPkgs.length.toLocaleString('tr-TR');
+  if (DOM.cOk)   DOM.cOk.textContent   = ok.toLocaleString('tr-TR');
+  if (DOM.cWarn) DOM.cWarn.textContent  = warn.toLocaleString('tr-TR');
+  if (DOM.cBad)  DOM.cBad.textContent   = bad.toLocaleString('tr-TR');
+  if (DOM.chips) DOM.chips.hidden = false;
 }
 
-/* ── CSV dışa aktarma ── */
+/* ── CSV ── */
 function exportCSV() {
-  const cols = ['Kategori', 'Paket Adı', 'Versiyon', 'Boyut', 'Sistem', 'Son Güncelleme', 'Geçen Süre', 'Durum', 'Kısa Not'];
+  const cols = ['Paket Adı', 'Sürüm', 'Kategori', 'Depo', 'Durum', 'Açıklama', 'Detay URL'];
   const rows = filtered.map(p => [
-    p.category, p.name, p.version, p.size, 'pisi',
-    p.lastUpdate || '', relTime(p.lastUpdate), p.status.label, shortNote(p),
+    p.name, p.version, p.category, p.repo,
+    p.status.label, p.desc,
+    p.detailUrl || '',
   ]);
-  const csv = [cols, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const csv = [cols, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `pisilinux-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  const link = document.createElement('a');
+  link.href = url; link.download = `pisilinux-packages-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link); link.click();
+  document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
-/* ── Tablo sıralama ── */
+/* ── Sıralama ── */
 function setupSorting() {
   document.querySelectorAll('th[data-sort]').forEach(th => {
-    const clickFn = () => {
+    const fn = () => {
       const k = th.dataset.sort;
       if (!k) return;
-      sortAsc = sortKey === k ? !sortAsc : (k !== 'lastUpdate' && k !== 'daysAgo');
+      sortAsc = sortKey === k ? !sortAsc : true;
       sortKey = k;
       document.querySelectorAll('th[data-sort]').forEach(t => {
         t.setAttribute('aria-sort', 'none');
         t.classList.remove('sorted');
-        const sp = t.querySelector('.sort-arrow');
+        const sp = t.querySelector('.sa');
         if (sp) sp.textContent = '';
       });
       th.setAttribute('aria-sort', sortAsc ? 'ascending' : 'descending');
       th.classList.add('sorted');
-      const sp = th.querySelector('.sort-arrow');
+      const sp = th.querySelector('.sa');
       if (sp) sp.textContent = sortAsc ? ' ↑' : ' ↓';
       applyFilters();
     };
-    th.addEventListener('click', clickFn);
-    th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickFn(); } });
+    th.addEventListener('click', fn);
+    th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
   });
 }
 
 /* ── Event listeners ── */
 function setupEvents() {
-  // Chip filtreler
   document.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
@@ -519,23 +486,19 @@ function setupEvents() {
     });
   });
 
-  // Arama
   DOM.searchInput?.addEventListener('input', applyFilters);
   DOM.catFilter?.addEventListener('change', applyFilters);
+  DOM.repoFilter?.addEventListener('change', applyFilters);
 
-  // Yükle / Yenile
   DOM.loadBtn?.addEventListener('click', () => {
     const cached = Cache.load();
-    if (cached) { allPkgs = cached; onReady('önbellekten'); }
+    if (cached && cached.length > 0) { allPkgs = cached; onReady('önbellekten'); }
     else loadAll();
   });
 
   DOM.refreshBtn?.addEventListener('click', () => { Cache.clear(); loadAll(); });
-
-  // CSV
   DOM.csvBtn?.addEventListener('click', exportCSV);
 
-  // Sıralama
   setupSorting();
 }
 
