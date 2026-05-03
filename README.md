@@ -31,7 +31,37 @@
 - 📥 **CSV dışa aktarma** — Görünen listeyi tek tıkla indir
 - 📱 **Mobil uyumlu** — 320px'e kadar tam destek (kart görünümü)
 - 🛡️ **Güvenli** — XSS, SSRF, Path Traversal korumaları + CSP
-
+<!-- Responsive GIF resim -->
+<img
+  src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts.gif"
+  alt="plpts animated gif"
+  style="
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  "
+/>
+<img
+  src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts1.png"
+  alt="plpts animated gif"
+  style="
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  "
+/>
+<img
+  src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts2.png"
+  alt="plpts animated gif"
+  style="
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  "
+/>
 ---
 
 ## 🚀 Kurulum
