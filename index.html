@@ -1,133 +1,89 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="description" content="PisiLinux main deposundaki paketlerin güncelleme durumlarını tarihine göre otomatik takip edin." />
-  <meta name="theme-color" content="#0f1117" />
-
-  <!-- CSP: Yalnızca güvenilir kaynaklara izin ver -->
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+  <meta name="description" content="PisiLinux paketlerini developer.pisilinux.org üzerinden tarihine göre takip edin."/>
+  <meta name="theme-color" content="#0f1117"/>
   <meta http-equiv="Content-Security-Policy"
-    content="
-      default-src 'self';
-      script-src 'self';
-      style-src 'self' https://fonts.googleapis.com;
-      font-src https://fonts.gstatic.com;
-      connect-src https://api.github.com;
-      img-src 'self' data:;
-      frame-ancestors 'none';
-    " />
-
+    content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://developer.pisilinux.org; img-src 'self' data:; frame-ancestors 'none';"/>
   <title>PisiLinux Paket Takip</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-
 <a href="#main" class="skip-link">İçeriğe geç</a>
 
-<div class="app-shell">
+<div class="app">
 
   <!-- HEADER -->
   <header class="header">
-    <div class="header-top">
+    <div class="header-inner">
+
       <div class="brand">
         <div class="brand-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-            <line x1="12" y1="22.08" x2="12" y2="12"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
           </svg>
         </div>
-        <div class="brand-text">
-          <h1>PisiLinux <span>Paket Takip</span></h1>
-          <p>
-            <a href="https://github.com/pisilinux/main" target="_blank" rel="noopener noreferrer">
-              github.com/pisilinux/main
-            </a>
+        <div>
+          <h1>PisiLinux <span class="accent">Paket Takip</span></h1>
+          <p class="brand-sub">
+            <a href="https://developer.pisilinux.org/packages" target="_blank" rel="noopener noreferrer">developer.pisilinux.org/packages</a>
           </p>
         </div>
       </div>
 
       <!-- Stat chips -->
-      <div class="stat-chips" id="statChips" hidden>
-        <button class="chip chip-all active" data-f="all">
-          Tümü <strong id="c-all">0</strong>
-        </button>
-        <button class="chip chip-ok" data-f="updated">
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,6 4,9.5 11,2.5"/></svg>
-          Güncel <strong id="c-ok">0</strong>
+      <div class="chips" id="chips" hidden aria-label="Durum filtreleri">
+        <button class="chip chip-all active" data-f="all">Tümü <b id="c-all">–</b></button>
+        <button class="chip chip-ok"   data-f="updated">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 4,9.5 11,2.5"/></svg>
+          Güncel <b id="c-ok">–</b>
         </button>
         <button class="chip chip-warn" data-f="stale">
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 2v4M6 8.5v.5"/><path d="M1 10 6 1l5 9H1z"/></svg>
-          Orta <strong id="c-warn">0</strong>
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2v3.5M6 8v.5"/><path d="M1 10.5 6 1l5 9.5H1z"/></svg>
+          Orta <b id="c-warn">–</b>
         </button>
-        <button class="chip chip-bad" data-f="old">
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
-          Eski <strong id="c-bad">0</strong>
+        <button class="chip chip-bad"  data-f="old">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+          Eski <b id="c-bad">–</b>
         </button>
       </div>
+
     </div>
 
     <!-- Controls -->
     <div class="controls">
       <div class="search-wrap">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input
-          type="search"
-          id="searchInput"
-          placeholder="Paket, kategori veya versiyon ara…"
-          aria-label="Paket ara"
-          maxlength="100"
-          autocomplete="off"
-          spellcheck="false"
-        />
+        <svg class="search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" id="searchInput" placeholder="Paket adı, sürüm veya kategori ara…" aria-label="Paket ara" maxlength="100" autocomplete="off" spellcheck="false"/>
       </div>
-
-      <select id="catFilter" aria-label="Kategori filtresi">
-        <option value="all">Tüm kategoriler</option>
-      </select>
-
-      <button class="btn btn-primary" id="loadBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
+      <select id="catFilter" aria-label="Kategori"><option value="all">Tüm kategoriler</option></select>
+      <select id="repoFilter" aria-label="Depo"><option value="all">Tüm depolar</option></select>
+      <button class="btn btn-load" id="loadBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Yükle
       </button>
-
-      <button class="btn btn-secondary" id="refreshBtn" style="display:none" aria-label="Yenile">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
+      <button class="btn btn-refresh" id="refreshBtn" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Yenile
       </button>
     </div>
 
     <!-- Progress -->
-    <div class="progress-wrap" id="progressWrap" hidden>
-      <div class="progress-bar" id="progBar"></div>
-    </div>
+    <div class="progress-wrap" id="progWrap" hidden><div class="progress-fill" id="progFill"></div></div>
 
     <!-- Status bar -->
     <div class="status-bar" role="status" aria-live="polite">
-      <span class="status-dot" id="statusDot"></span>
-      <span id="statusMsg">Yüklemek için "Yükle" butonuna basın.</span>
+      <span class="sdot" id="sdot"></span>
+      <span id="stext">Yüklemek için "Yükle" butonuna basın.</span>
     </div>
   </header>
-
-  <!-- RATE LIMIT WARNING -->
-  <div class="rate-warn" id="rateWarn" hidden role="alert">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-    <span id="rateMsg">GitHub API limiti yaklaşıyor.</span>
-  </div>
 
   <!-- MAIN -->
   <main id="main" class="main">
@@ -135,51 +91,34 @@
     <!-- Results bar -->
     <div class="results-bar" id="resultsBar" hidden>
       <span id="resultsCount" role="status" aria-live="polite"></span>
-      <button class="btn-csv" id="csvBtn" hidden aria-label="CSV olarak indir">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-        </svg>
-        CSV indir
-      </button>
+      <div class="results-actions">
+        <button class="btn-csv" id="csvBtn" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          CSV
+        </button>
+      </div>
     </div>
 
     <!-- Table -->
-    <div class="table-wrap" id="tableWrap">
+    <div class="tbl-outer">
       <table id="pkgTable" aria-label="PisiLinux paket listesi">
         <thead>
           <tr>
-            <th class="col-name" data-sort="name" tabindex="0" aria-sort="none">
-              Paket Adı <span class="sort-arrow" id="s-name"></span>
-            </th>
-            <th class="col-size" data-sort="size" tabindex="0" aria-sort="none">
-              Boyut <span class="sort-arrow" id="s-size"></span>
-            </th>
-            <th class="col-sys">Sistem</th>
-            <th class="col-upd" data-sort="lastUpdate" tabindex="0" aria-sort="none">
-              Güncel <span class="sort-arrow" id="s-lastUpdate"></span>
-            </th>
-            <th class="col-ago" data-sort="daysAgo" tabindex="0" aria-sort="none">
-              Güncel olmayan <span class="sort-arrow" id="s-daysAgo"></span>
-            </th>
-            <th class="col-status" data-sort="statusKey" tabindex="0" aria-sort="none">
-              Durum <span class="sort-arrow" id="s-statusKey"></span>
-            </th>
-            <th class="col-note">Kısa Not</th>
+            <th class="c-name"    data-sort="name"     tabindex="0" aria-sort="none">Paket Adı <span class="sa" id="sa-name"></span></th>
+            <th class="c-version" data-sort="version"  tabindex="0" aria-sort="none">Sürüm <span class="sa" id="sa-version"></span></th>
+            <th class="c-cat"     data-sort="category" tabindex="0" aria-sort="none">Kategori <span class="sa" id="sa-category"></span></th>
+            <th class="c-repo"    data-sort="repo"     tabindex="0" aria-sort="none">Depo <span class="sa" id="sa-repo"></span></th>
+            <th class="c-status"  data-sort="statusKey" tabindex="0" aria-sort="none">Durum <span class="sa" id="sa-statusKey"></span></th>
+            <th class="c-note"    >Kısa Not</th>
           </tr>
         </thead>
         <tbody id="pkgBody">
-          <tr class="empty-row">
-            <td colspan="7">
-              <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                </svg>
-                <p>Yüklemek için yukarıdaki <strong>Yükle</strong> butonuna tıklayın.</p>
-              </div>
-            </td>
-          </tr>
+          <tr><td colspan="6">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              <p>Yüklemek için <strong>Yükle</strong> butonuna tıklayın.</p>
+            </div>
+          </td></tr>
         </tbody>
       </table>
     </div>
@@ -191,15 +130,14 @@
     <div class="footer-inner">
       <div class="footer-links">
         <a href="https://pisilinux.org" target="_blank" rel="noopener noreferrer">pisilinux.org</a>
+        <a href="https://developer.pisilinux.org" target="_blank" rel="noopener noreferrer">developer</a>
         <a href="https://github.com/pisilinux" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="https://docs.github.com/rest" target="_blank" rel="noopener noreferrer">GitHub API</a>
       </div>
-      <span class="footer-note">Veriler GitHub API · Önbellek 15 dk · <span id="lastFetch"></span></span>
+      <span class="footer-note">Kaynak: developer.pisilinux.org · Önbellek 30 dk · <span id="lastFetch"></span></span>
     </div>
   </footer>
 
-</div><!-- .app-shell -->
-
+</div>
 <script src="tracker.js"></script>
 </body>
 </html>
