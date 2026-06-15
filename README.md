@@ -34,6 +34,11 @@
 
 ---
 
+**Önizleme**
+<img src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts1.png" width="1170" height="690" class="aligncenter size-full" />
+
+<img src="https://raw.githubusercontent.com/epiusu/pisistatu/refs/heads/main/plpts.gif" width="1170" height="690" class="aligncenter size-full" />
+
 ## 🚀 Kurulum
 
 ### En kolay: Yerel sunucu
